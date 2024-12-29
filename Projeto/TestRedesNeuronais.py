@@ -45,13 +45,6 @@ def preprocess_neural_network(df_numerics):
             
     """
     continuous_columns = ["AGE", "HEART RATE", "SYSTOLIC BLOOD PRESSURE", "TEMPERATURE"]
-    for column in continuous_columns:
-        Q1 = df_numerics[column].quantile(0.25)
-        Q3 = df_numerics[column].quantile(0.75)
-        IQR = Q3 - Q1
-        lower_bound = Q1 - 1.5 * IQR
-        upper_bound = Q3 + 1.5 * IQR
-        df_numerics = df_numerics[(df_numerics[column] >= lower_bound) & (df_numerics[column] <= upper_bound)]
         
     # Normalização
     scaler = MinMaxScaler()
@@ -79,11 +72,11 @@ def process_img_data(df_img):
     X_img = df_img.values.reshape(df_img.shape[0], -1)
     # Normalizar valores binários (0 e 1)
     X_img = X_img / 1.0
+    
     return X_img
 
 # Função de seleção de features
 def feature_selection(X, y):
-    
     
     # Treinar um modelo de Random Forest
     rf = RandomForestClassifier(n_estimators=100, random_state=42)
@@ -106,7 +99,7 @@ def feature_selection(X, y):
     # Obter os nomes das features selecionadas
     selected_features = X.columns[selector.get_support()]
     
-    return X_selected, selected_features
+    return selected_features
 
 # Função de seleção de features usando ANOVA
 def feature_selection_anova(X, y):
@@ -118,8 +111,6 @@ def feature_selection_anova(X, y):
     scores = selector.scores_
     feature_scores = pd.Series(scores, index=X.columns).sort_values(ascending=False)
     
-    print("Scores das features usando ANOVA:")
-    print(feature_scores)
     
     # Plotar os scores das features
     plt.figure(figsize=(10, 6))
@@ -127,7 +118,7 @@ def feature_selection_anova(X, y):
     plt.title('Scores das Features usando ANOVA')
     plt.show()
     
-    return X_selected, feature_scores.index
+    return feature_scores.index
 
 # Função de seleção de features usando Informação Mútua
 def feature_selection_mutual_info(X, y):
@@ -139,16 +130,13 @@ def feature_selection_mutual_info(X, y):
     scores = selector.scores_
     feature_scores = pd.Series(scores, index=X.columns).sort_values(ascending=False)
     
-    print("Scores das features usando Informação Mútua:")
-    print(feature_scores)
-    
     # Plotar os scores das features
     plt.figure(figsize=(10, 6))
     sns.barplot(x=feature_scores, y=feature_scores.index)
     plt.title('Scores das Features usando Informação Mútua')
     plt.show()
     
-    return X_selected, feature_scores.index
+    return feature_scores.index
     
 def save_to_csv(X, filename):
     X.to_csv(filename, index=False)
@@ -202,16 +190,13 @@ def evaluate_model(model, Xtest, ytest):
 #Selecionar as features mais importantes
 def select_features(X, target, num_features=7):
     # Seleção de features usando Random Forest
-    _, selected_features_rf = feature_selection(X, target)
-    print("Selected features (Random Forest):", selected_features_rf)
+    selected_features_rf = feature_selection(X, target)
 
     # Seleção de features usando ANOVA
-    _, selected_features_anova = feature_selection_anova(X, target)
-    print("Selected features (ANOVA):", selected_features_anova)
+    selected_features_anova = feature_selection_anova(X, target)
 
     # Seleção de features usando Informação Mútua
-    _, selected_features_mutual_info = feature_selection_mutual_info(X, target)
-    print("Selected features (Informação Mútua):", selected_features_mutual_info)
+    selected_features_mutual_info = feature_selection_mutual_info(X, target)
 
     # Criar um ranking global ponderado
     feature_scores = {}
@@ -233,34 +218,27 @@ def select_features(X, target, num_features=7):
     # Selecionar o DataFrame com as features escolhidas
     X_selected = X[top_features]
 
-    # Exibir as pontuações e as features selecionadas
-    print("\nGlobal Feature Scores:")
-    for feature, score in sorted_features:
-        print(f"{feature}: {score} pontos")
-
-    print(f"\nTop {num_features} features selecionadas:", top_features)
-
     return X_selected, top_features
 
 
 def main():
     
     df_numerics, df_img = load_data()
-    print("Shape of df_numerics: ", df_numerics.shape)
-    print("Shape of df_img: ", df_img.shape)
-    
+
     X, target = preprocess_neural_network(df_numerics)
     
+    # Com base nestes 3 métodos de seleção de features, podemos escolher as features mais importantes, iremos juntar uma combinação destas features
     X_selected, selected_features = select_features(X, target)
-    print("Selected features: ", selected_features)
-    print("Shape of X: ", X_selected.shape)
     
     X_img = process_img_data(df_img)
     
-    print("Shape of X: ", X_img.shape)
+    X_combined = combine_features(X_selected, X_img)
     
-    # Com base nestes 3 métodos de seleção de features, podemos escolher as features mais importantes, iremos juntar uma combinação destas features
+    print(X_combined.shape)
     
+    model, Xtest, ytest = train_neural_network(X_combined, target)
+    
+    evaluate_model(model, Xtest, ytest)
     
     
     
