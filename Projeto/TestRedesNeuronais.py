@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_selection import SelectFromModel, SelectKBest, f_classif, mutual_info_classif
+from sklearn.metrics import confusion_matrix, roc_curve
 from sklearn.model_selection import train_test_split
 from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import MinMaxScaler
@@ -56,6 +57,13 @@ def preprocess_neural_network(df_numerics):
     scaler = MinMaxScaler()
     df_numerics[continuous_columns] = scaler.fit_transform(df_numerics[continuous_columns])
     
+    #Correlação
+    # Verificar a correlação entre as variáveis
+    print("Correlation between variables") 
+    corr = df_numerics.corr()
+    sns.heatmap(corr, annot=True)
+    plt.show()
+    
     
     # One-hot encoding
     df_numerics = pd.get_dummies(df_numerics, columns=["GENDER", "MARITAL STATUS", "VACINATION", "RESPIRATION CLASS"], drop_first=True)
@@ -76,16 +84,10 @@ def process_img_data(df_img):
 # Função de seleção de features
 def feature_selection(X, y):
     
-    #Correlação
-    # Verificar a correlação entre as variáveis
-    print("Correlation between variables") 
-    corr = X.corr()
-    sns.heatmap(corr, annot=True)
-    plt.show()
     
     # Treinar um modelo de Random Forest
     rf = RandomForestClassifier(n_estimators=100, random_state=42)
-    rf.fit(X, y)
+    rf.fit(X, y) 
     
     # Importância das features
     feature_importances = pd.Series(rf.feature_importances_, index=X.columns)
@@ -98,7 +100,7 @@ def feature_selection(X, y):
     plt.show()
     
     # Selecionar features importantes
-    selector = SelectFromModel(rf, threshold='mean', prefit=True)
+    selector = SelectFromModel(rf, threshold=-np.inf, prefit=True)
     X_selected = selector.transform(X)
     
     # Obter os nomes das features selecionadas
@@ -159,12 +161,87 @@ def combine_features(X_tabular, X_img):
     return X_combined
 
 # 5. Treinar a rede neural
-def train_neural_network(X_train, y_train):
-    # Configurar MLPClassifier
-    Xtrain, Xtest, ytrain, ytest = train_test_split(X_train, y_train, test_size=0.2, random_state=42)
+def train_neural_network(X,T):
+    
+    Xtrain, Xtest, ytrain, ytest = train_test_split(X, T, test_size=0.2, random_state=42)
     model = MLPClassifier(hidden_layer_sizes=(100, 50), max_iter=500, activation='relu', solver='adam')
-    model.fit(X_train, y_train)
-    return model
+    model.fit(Xtrain, ytrain)
+    
+    return model, Xtest, ytest
+
+def evaluate_model(model, Xtest, ytest):
+    #SE,SP,F1score, AUC, ROC, Confusion Matrix, Accuracy
+    ypred = model.predict(Xtest)
+    cm = confusion_matrix(ytest, ypred)
+    TN, FP, FN, TP = cm.ravel()
+    SE = TP / (TP + FN)
+    SP = TN / (TN + FP)
+    F1 = 2 * TP / (2 * TP + FP + FN)
+    accuracy = (cm[0,0] + cm[1,1]) / np.sum(cm)
+    print("Sensitivity: ", SE)
+    print("Specificity: ", SP)
+    print("F1 Score: ", F1)
+    print("Accuracy: ", accuracy)
+    print("Confusion Matrix:")
+    print(cm)
+    # Plotar a matriz de confusão
+    sns.heatmap(cm, annot=True)
+    plt.xlabel('Predicted')
+    plt.ylabel('True')
+    plt.show()
+    # Plotar a curva ROC
+    yprob = model.predict_proba(Xtest)[:, 1]
+    fpr, tpr, _ = roc_curve(ytest, yprob)
+    plt.plot(fpr, tpr)
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('Curva ROC')
+    plt.show()
+    
+#Escolha de features com base nos 3 modelos de seleção de features
+#Selecionar as features mais importantes
+def select_features(X, target, num_features=7):
+    # Seleção de features usando Random Forest
+    _, selected_features_rf = feature_selection(X, target)
+    print("Selected features (Random Forest):", selected_features_rf)
+
+    # Seleção de features usando ANOVA
+    _, selected_features_anova = feature_selection_anova(X, target)
+    print("Selected features (ANOVA):", selected_features_anova)
+
+    # Seleção de features usando Informação Mútua
+    _, selected_features_mutual_info = feature_selection_mutual_info(X, target)
+    print("Selected features (Informação Mútua):", selected_features_mutual_info)
+
+    # Criar um ranking global ponderado
+    feature_scores = {}
+
+    # Atribuir pontuação baseada na posição em cada lista
+    for rank, feature in enumerate(selected_features_rf):
+        feature_scores[feature] = feature_scores.get(feature, 0) + (len(selected_features_rf) - rank)
+
+    for rank, feature in enumerate(selected_features_anova):
+        feature_scores[feature] = feature_scores.get(feature, 0) + (len(selected_features_anova) - rank)
+
+    for rank, feature in enumerate(selected_features_mutual_info):
+        feature_scores[feature] = feature_scores.get(feature, 0) + (len(selected_features_mutual_info) - rank)
+
+    # Ordenar features pelo score acumulado
+    sorted_features = sorted(feature_scores.items(), key=lambda x: -x[1])
+    top_features = [feature for feature, score in sorted_features[:num_features]]
+
+    # Selecionar o DataFrame com as features escolhidas
+    X_selected = X[top_features]
+
+    # Exibir as pontuações e as features selecionadas
+    print("\nGlobal Feature Scores:")
+    for feature, score in sorted_features:
+        print(f"{feature}: {score} pontos")
+
+    print(f"\nTop {num_features} features selecionadas:", top_features)
+
+    return X_selected, top_features
+
 
 def main():
     
@@ -174,21 +251,17 @@ def main():
     
     X, target = preprocess_neural_network(df_numerics)
     
-    X_selected, selected_features = feature_selection(X, target)
-    
+    X_selected, selected_features = select_features(X, target)
     print("Selected features: ", selected_features)
-    print("Shape of X: ", X.shape)
-    print("Shape of X_selected: ", X_selected.shape)
+    print("Shape of X: ", X_selected.shape)
     
-    #X_selected_anova, selected_features_anova = feature_selection_anova(X, target)
-    #print("Features selecionadas usando ANOVA:")
-    #print(selected_features_anova)
+    X_img = process_img_data(df_img)
     
-    #X_selected_mutual_info, selected_features_mutual_info = feature_selection_mutual_info(X, target)
-    #print("Features selecionadas usando Informação Mútua:")
-    #print(selected_features_mutual_info)
+    print("Shape of X: ", X_img.shape)
     
-    # Não iremos usar nem o ANOVA nem a Informação Mútua, uma vez que é bem vísivel pela matriz de Correlação que, por exemplo, a variável "AGE" tem uma correlação de 1 para todas as outras variáveis, o que significa que é uma variável redundante.
+    # Com base nestes 3 métodos de seleção de features, podemos escolher as features mais importantes, iremos juntar uma combinação destas features
+    
+    
     
     
 if __name__ == "__main__":
