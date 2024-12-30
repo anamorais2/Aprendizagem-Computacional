@@ -125,30 +125,32 @@ def feature_selection_mutual_info(X, y):
 
 # Feature selection based on 3 feature selection models
 # Select the most important features
-def select_features(X, target, num_features=7):
-    
-    selected_features_rf = feature_selection_Random_Forest(X, target)
+def select_features(X, target, num_features=7, selected_features=None):
+    if selected_features is None:
+        selected_features_rf = feature_selection_Random_Forest(X, target)
 
-    selected_features_anova = feature_selection_anova(X, target)
+        selected_features_anova = feature_selection_anova(X, target)
 
-    selected_features_mutual_info = feature_selection_mutual_info(X, target)
+        selected_features_mutual_info = feature_selection_mutual_info(X, target)
 
-    # Create a weighted global ranking
-    feature_scores = {}
+        # Create a weighted global ranking
+        feature_scores = {}
 
-    # Assign scores based on position in each list
-    for rank, feature in enumerate(selected_features_rf):
-        feature_scores[feature] = feature_scores.get(feature, 0) + (len(selected_features_rf) - rank)
+        # Assign scores based on position in each list
+        for rank, feature in enumerate(selected_features_rf):
+            feature_scores[feature] = feature_scores.get(feature, 0) + (len(selected_features_rf) - rank)
 
-    for rank, feature in enumerate(selected_features_anova):
-        feature_scores[feature] = feature_scores.get(feature, 0) + (len(selected_features_anova) - rank)
+        for rank, feature in enumerate(selected_features_anova):
+            feature_scores[feature] = feature_scores.get(feature, 0) + (len(selected_features_anova) - rank)
 
-    for rank, feature in enumerate(selected_features_mutual_info):
-        feature_scores[feature] = feature_scores.get(feature, 0) + (len(selected_features_mutual_info) - rank)
+        for rank, feature in enumerate(selected_features_mutual_info):
+            feature_scores[feature] = feature_scores.get(feature, 0) + (len(selected_features_mutual_info) - rank)
 
-    # Sort features by accumulated score
-    sorted_features = sorted(feature_scores.items(), key=lambda x: -x[1])
-    top_features = [feature for feature, score in sorted_features[:num_features]]
+        # Sort features by accumulated score
+        sorted_features = sorted(feature_scores.items(), key=lambda x: -x[1])
+        top_features = [feature for feature, score in sorted_features[:num_features]]
+    else:
+        top_features = selected_features
 
     X_selected = X[top_features]
 
@@ -163,7 +165,7 @@ def combine_features(X_tabular, X_img):
 def train_neural_network(X,T):
     
     Xtrain, Xtest, ytrain, ytest = train_test_split(X, T, test_size=0.2, random_state=42)
-    model = MLPClassifier(hidden_layer_sizes=(100, 50), max_iter=4000, activation='tanh', solver='adam', alpha=1e-05, learning_rate='adaptive', early_stopping=True, batch_size=64)
+    model = MLPClassifier(hidden_layer_sizes=(200, 100), max_iter=1000, activation='tanh', solver='adam', alpha=0.0001, learning_rate='adaptive', early_stopping=True, batch_size=32)
     evaluate_with_cross_validation(model, Xtrain, ytrain)
     model.fit(Xtrain, ytrain)
     
@@ -314,8 +316,9 @@ def main():
 
     X, target = preprocess_neural_network(df_numerics)
     
+    selected_features = ["AGE", "HEART RATE", "SYSTOLIC BLOOD PRESSURE", "TEMPERATURE", "VACINATION", "RULE", "GENDER"]
     # Based on these 3 feature selection methods, we can choose the most important features, we will combine a combination of these features
-    X_selected, selected_features = select_features(X, target)
+    X_selected, selected_features = select_features(X, target, num_features=7, selected_features=selected_features)
     
     print("Selected features:")
     print(selected_features)
@@ -326,14 +329,14 @@ def main():
     
     # Tune hyperparameters
     
-    X_train, X_test, y_train, y_test = train_test_split(X_selected, target, test_size=0.2, random_state=42) # Tenho dúvida relativamente a concatenar aqui os dados tabulares com os dados de imagem num só array
-    best_model = tune_hyperparameters(X_train, y_train)
+    #X_train, X_test, y_train, y_test = train_test_split(X_selected, target, test_size=0.2, random_state=42) # Tenho dúvida relativamente a concatenar aqui os dados tabulares com os dados de imagem num só array
+    #best_model = tune_hyperparameters(X_train, y_train)
     
-    print("Melhor modelo ajustado:")
-    print(best_model)
+    #print("Melhor modelo ajustado:")
+    #print(best_model)
     
-    #model, Xtest, ytest = train_neural_network(X_selected, target)
-    #evaluate_model(model, Xtest, ytest)
+    model, Xtest, ytest = train_neural_network(X_selected, target)
+    evaluate_model(model, Xtest, ytest)
     
     #cnn_model, cnn_history, x_test, y_test = train_cnn(X_selected, X_img, target)
     #evaluate_model_cnn(cnn_model, x_test, y_test)
