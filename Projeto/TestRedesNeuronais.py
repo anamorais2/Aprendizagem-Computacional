@@ -4,23 +4,26 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_selection import SelectFromModel, SelectKBest, f_classif, mutual_info_classif
 from sklearn.metrics import confusion_matrix, roc_curve
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import MinMaxScaler
 import seaborn as sns
+from sklearn.model_selection import cross_val_score
+import tensorflow as tf
 
 
 # Load the data
 def load_data():
+    
     # Load the COVID_numerics.csv file
     colunas = ["GENDER","AGE","MARITAL STATUS","VACINATION","RESPIRATION CLASS","HEART RATE","SYSTOLIC BLOOD PRESSURE","TEMPERATURE","TARGET"]
     df_numerics = pd.read_csv('COVID_numerics.csv', usecols=colunas)
+    
     # Load the COVID_IMG.csv file without header
     df_img = pd.read_csv('COVID_IMG.csv', header=None)
     return df_numerics, df_img
 
 def add_rule(X):
-    # Adicionar uma regra
     X['RULE'] = ((X["RESPIRATION CLASS"] >= 2) & (X["TEMPERATURE"] > 37.8)).astype(int)
     return X
 
@@ -28,131 +31,140 @@ def add_rule(X):
 
 def preprocess_neural_network(df_numerics):
     
-    # Adicionar uma regra
     df_numerics = add_rule(df_numerics)
     
-    # Remover duplicados
     df_numerics.drop_duplicates(inplace=True)
-    # Substituir valores ausentes por média
-    df_numerics.fillna(df_numerics.mean(), inplace=True)
+    
     # Tratamento de valores ausentes
-    """
     for col in df_numerics.columns:
         if df_numerics[col].dtype == 'object':
             df_numerics[col].fillna(df_numerics[col].mode()[0], inplace=True)
         else:
             df_numerics[col].fillna(df_numerics[col].mean(), inplace=True)
             
-    """
     continuous_columns = ["AGE", "HEART RATE", "SYSTOLIC BLOOD PRESSURE", "TEMPERATURE"]
         
-    # Normalização
+    # Normalization
     scaler = MinMaxScaler()
     df_numerics[continuous_columns] = scaler.fit_transform(df_numerics[continuous_columns])
     
-    #Correlação
-    # Verificar a correlação entre as variáveis
+    # Correlation
+    # Check the correlation between variables
     print("Correlation between variables") 
     corr = df_numerics.corr()
     sns.heatmap(corr, annot=True)
     plt.show()
-    
-    
-    # One-hot encoding
-    df_numerics = pd.get_dummies(df_numerics, columns=["GENDER", "MARITAL STATUS", "VACINATION", "RESPIRATION CLASS"], drop_first=True)
-    
-    #Separar a variável alvo
+        
+    # Separate the target variable
     target = df_numerics["TARGET"]
     X = df_numerics.drop(columns=["TARGET"])
     
     return X, target
 
 def process_img_data(df_img):
-    # Achatar as imagens (21x21 -> 441)
+    # Flatten the images (21x21 -> 441)
     X_img = df_img.values.reshape(df_img.shape[0], -1)
-    # Normalizar valores binários (0 e 1)
-    X_img = X_img / 1.0
-    
     return X_img
 
-# Função de seleção de features
-def feature_selection(X, y):
+def feature_selection_Random_Forest(X, y):
     
-    # Treinar um modelo de Random Forest
     rf = RandomForestClassifier(n_estimators=100, random_state=42)
     rf.fit(X, y) 
     
-    # Importância das features
+    # Feature importance
     feature_importances = pd.Series(rf.feature_importances_, index=X.columns)
     feature_importances = feature_importances.sort_values(ascending=False)
     
-    # Plotar a importância das features
     plt.figure(figsize=(10, 6))
     sns.barplot(x=feature_importances, y=feature_importances.index)
-    plt.title('Importância das Features')
+    plt.title('Feature Importance Random Forest')
     plt.show()
     
-    # Selecionar features importantes
+    # Select important features
     selector = SelectFromModel(rf, threshold=-np.inf, prefit=True)
     X_selected = selector.transform(X)
     
-    # Obter os nomes das features selecionadas
+    # Get the names of the selected features
     selected_features = X.columns[selector.get_support()]
     
     return selected_features
 
-# Função de seleção de features usando ANOVA
 def feature_selection_anova(X, y):
-    # Seleção de features usando ANOVA
+   
     selector = SelectKBest(score_func=f_classif, k='all')
     X_selected = selector.fit_transform(X, y)
     
-    # Obter os scores das features
+    # Get feature scores
     scores = selector.scores_
     feature_scores = pd.Series(scores, index=X.columns).sort_values(ascending=False)
     
     
-    # Plotar os scores das features
     plt.figure(figsize=(10, 6))
     sns.barplot(x=feature_scores, y=feature_scores.index)
-    plt.title('Scores das Features usando ANOVA')
+    plt.title('Feature Scores using ANOVA')
     plt.show()
     
     return feature_scores.index
 
-# Função de seleção de features usando Informação Mútua
 def feature_selection_mutual_info(X, y):
-    # Seleção de features usando Informação Mútua
+    
+    
     selector = SelectKBest(score_func=mutual_info_classif, k='all')
     X_selected = selector.fit_transform(X, y)
     
-    # Obter os scores das features
+    # Get feature scores
     scores = selector.scores_
     feature_scores = pd.Series(scores, index=X.columns).sort_values(ascending=False)
     
-    # Plotar os scores das features
     plt.figure(figsize=(10, 6))
     sns.barplot(x=feature_scores, y=feature_scores.index)
-    plt.title('Scores das Features usando Informação Mútua')
+    plt.title('Feature Scores using Mutual Information')
     plt.show()
     
     return feature_scores.index
+
+# Feature selection based on 3 feature selection models
+# Select the most important features
+def select_features(X, target, num_features=7):
     
-def save_to_csv(X, filename):
-    X.to_csv(filename, index=False)
-    print(f"Dados salvos em {filename}")
+    selected_features_rf = feature_selection_Random_Forest(X, target)
+
+    selected_features_anova = feature_selection_anova(X, target)
+
+    selected_features_mutual_info = feature_selection_mutual_info(X, target)
+
+    # Create a weighted global ranking
+    feature_scores = {}
+
+    # Assign scores based on position in each list
+    for rank, feature in enumerate(selected_features_rf):
+        feature_scores[feature] = feature_scores.get(feature, 0) + (len(selected_features_rf) - rank)
+
+    for rank, feature in enumerate(selected_features_anova):
+        feature_scores[feature] = feature_scores.get(feature, 0) + (len(selected_features_anova) - rank)
+
+    for rank, feature in enumerate(selected_features_mutual_info):
+        feature_scores[feature] = feature_scores.get(feature, 0) + (len(selected_features_mutual_info) - rank)
+
+    # Sort features by accumulated score
+    sorted_features = sorted(feature_scores.items(), key=lambda x: -x[1])
+    top_features = [feature for feature, score in sorted_features[:num_features]]
+
+    X_selected = X[top_features]
+
+    return X_selected, top_features
     
-# 4. Concatenar dados tabulares e imagens
+    
+# Combine tabular and image data
 def combine_features(X_tabular, X_img):
-    # Concatenar os dados tabulares com os dados das imagens
     X_combined = np.hstack((X_tabular, X_img))
     return X_combined
 
-# 5. Treinar a rede neural
 def train_neural_network(X,T):
     
     Xtrain, Xtest, ytrain, ytest = train_test_split(X, T, test_size=0.2, random_state=42)
-    model = MLPClassifier(hidden_layer_sizes=(100, 50), max_iter=500, activation='relu', solver='adam')
+    model = MLPClassifier(hidden_layer_sizes=(100, 50), max_iter=4000, activation='tanh', solver='adam', alpha=1e-05, learning_rate='adaptive', early_stopping=True, batch_size=64)
+    evaluate_with_cross_validation(model, Xtrain, ytrain)
     model.fit(Xtrain, ytrain)
     
     return model, Xtest, ytest
@@ -172,12 +184,14 @@ def evaluate_model(model, Xtest, ytest):
     print("Accuracy: ", accuracy)
     print("Confusion Matrix:")
     print(cm)
-    # Plotar a matriz de confusão
+    
+    # Plot confusion matrix
     sns.heatmap(cm, annot=True)
     plt.xlabel('Predicted')
     plt.ylabel('True')
     plt.show()
-    # Plotar a curva ROC
+    
+    # Plot ROC curve
     yprob = model.predict_proba(Xtest)[:, 1]
     fpr, tpr, _ = roc_curve(ytest, yprob)
     plt.plot(fpr, tpr)
@@ -186,39 +200,112 @@ def evaluate_model(model, Xtest, ytest):
     plt.title('Curva ROC')
     plt.show()
     
-#Escolha de features com base nos 3 modelos de seleção de features
-#Selecionar as features mais importantes
-def select_features(X, target, num_features=7):
-    # Seleção de features usando Random Forest
-    selected_features_rf = feature_selection(X, target)
+# Function for evaluation with cross-validation
+def evaluate_with_cross_validation(model, X, y):
+    f1_scores = cross_val_score(model, X, y, cv=5, scoring='f1')
+    acc_scores = cross_val_score(model, X, y, cv=5, scoring='accuracy')
 
-    # Seleção de features usando ANOVA
-    selected_features_anova = feature_selection_anova(X, target)
+    print("F1 Score médio em validação cruzada:", np.mean(f1_scores))
+    print("Acurácia média em validação cruzada:", np.mean(acc_scores))
 
-    # Seleção de features usando Informação Mútua
-    selected_features_mutual_info = feature_selection_mutual_info(X, target)
+    
+def tune_hyperparameters(X, y):
+    param_grid = {
+        'hidden_layer_sizes': [(50,), (100,), (150,), (100, 50), (150, 75), (200, 100)],
+        'activation': ['tanh', 'relu'],
+        'solver': ['sgd', 'adam'],
+        'alpha': [1e-5, 0.0001, 0.05],
+        'learning_rate': ['constant', 'adaptive'],
+        'max_iter': [1000, 2000, 3000, 4000, 5000],
+        'early_stopping': [True],
+        'batch_size': [32, 64, 128]
+    }
+    
+    mlp = MLPClassifier(max_iter=4500)
+    grid_search = GridSearchCV(estimator=mlp, param_grid=param_grid, cv=5, scoring='accuracy', n_jobs=-1)
+    grid_search.fit(X, y)
+    
+    print("Melhores parâmetros encontrados:")
+    print(grid_search.best_params_)
+    
+    return grid_search.best_estimator_
 
-    # Criar um ranking global ponderado
-    feature_scores = {}
+def train_cnn(X_tabular, X_img, y, img_shape=(21, 21, 1), epochs=50, batch_size=32):
+    
+    # Reshape image data to the required shape
+    X_img = X_img.reshape(X_img.shape[0], *img_shape)
+    
+    # Split the data into training and testing sets
+    X_train_tabular, X_test_tabular, X_train_img, X_test_img, y_train, y_test = train_test_split(X_tabular, X_img, y, test_size=0.2, random_state=42)
+    
+    # Define the CNN model for image data
+    img_input = tf.keras.layers.Input(shape=img_shape)
+    x = tf.keras.layers.Conv2D(32, kernel_size=(3, 3), activation='relu')(img_input)
+    x = tf.keras.layers.MaxPooling2D(pool_size=(2, 2))(x)
+    x = tf.keras.layers.Conv2D(64, kernel_size=(3, 3), activation='relu')(x)
+    x = tf.keras.layers.MaxPooling2D(pool_size=(2, 2))(x)
+    x = tf.keras.layers.Flatten()(x)
+    x = tf.keras.layers.Dense(128, activation='relu')(x)
+    x = tf.keras.layers.Dropout(0.5)(x)
+    img_output = tf.keras.layers.Dense(64, activation='relu')(x)
+    
+    # Define the model for tabular data
+    tabular_input = tf.keras.layers.Input(shape=(X_tabular.shape[1],))
+    y =tf.keras.layers.Dense(64, activation='relu')(tabular_input)
+    y = tf.keras.layers.Dropout(0.5)(y)
+    tabular_output = tf.keras.layers.Dense(64, activation='relu')(y)
+    
+    # Combine the outputs of the two models
+    combined = tf.keras.layers.concatenate([img_output, tabular_output])
+    z = tf.keras.layers.Dense(128, activation='relu')(combined)
+    z = tf.keras.layers.Dropout(0.5)(z)
+    final_output = tf.keras.layers.Dense(1, activation='sigmoid')(z)
+    
+    # Define the combined model
+    model = tf.keras.models.Model(inputs=[img_input, tabular_input], outputs=final_output)
+    
+    # Compile the model
+    model.compile(optimizer=tf.keras.optimizers.Adam(), loss='binary_crossentropy', metrics=['accuracy'])
+    
+    # Train the model
+    history = model.fit([X_train_img, X_train_tabular], y_train, epochs=epochs, batch_size=batch_size, validation_split=0.2)
+    
+    return model, history, [X_test_img, X_test_tabular], y_test
 
-    # Atribuir pontuação baseada na posição em cada lista
-    for rank, feature in enumerate(selected_features_rf):
-        feature_scores[feature] = feature_scores.get(feature, 0) + (len(selected_features_rf) - rank)
-
-    for rank, feature in enumerate(selected_features_anova):
-        feature_scores[feature] = feature_scores.get(feature, 0) + (len(selected_features_anova) - rank)
-
-    for rank, feature in enumerate(selected_features_mutual_info):
-        feature_scores[feature] = feature_scores.get(feature, 0) + (len(selected_features_mutual_info) - rank)
-
-    # Ordenar features pelo score acumulado
-    sorted_features = sorted(feature_scores.items(), key=lambda x: -x[1])
-    top_features = [feature for feature, score in sorted_features[:num_features]]
-
-    # Selecionar o DataFrame com as features escolhidas
-    X_selected = X[top_features]
-
-    return X_selected, top_features
+def evaluate_model_cnn(model, Xtest, ytest):
+    # Sensitivity, Specificity, F1 Score, AUC, ROC, Confusion Matrix, Accuracy
+    yprob = model.predict(Xtest)
+    ypred = (yprob > 0.5).astype(int)  # Convert probabilities to binary classes
+    cm = confusion_matrix(ytest, ypred)
+    TN, FP, FN, TP = cm.ravel()
+    SE_0 = TN / (TN + FP)  # Sensitivity for class 0
+    SP_0 = TP / (TP + FN)  # Specificity for class 0
+    SE_1 = TP / (TP + FN)  # Sensitivity for class 1
+    SP_1 = TN / (TN + FP)  # Specificity for class 1
+    F1 = 2 * TP / (2 * TP + FP + FN)
+    accuracy = (cm[0,0] + cm[1,1]) / np.sum(cm)
+    
+    print("Sensitivity and Specificity for each class:")
+    print(f"Class 0 - Sensitivity: {SE_0:.2f}, Specificity: {SP_0:.2f}")
+    print(f"Class 1 - Sensitivity: {SE_1:.2f}, Specificity: {SP_1:.2f}")
+    print("F1 Score: ", F1)
+    print("Accuracy: ", accuracy)
+    print("Confusion Matrix:")
+    print(cm)
+    
+    # Plot confusion matrix
+    sns.heatmap(cm, annot=True, fmt='d')
+    plt.xlabel('Predicted')
+    plt.ylabel('True')
+    plt.show()
+    
+    # Plot ROC curve
+    fpr, tpr, _ = roc_curve(ytest, yprob)
+    plt.plot(fpr, tpr)
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('ROC Curve')
+    plt.show()
 
 
 def main():
@@ -227,18 +314,29 @@ def main():
 
     X, target = preprocess_neural_network(df_numerics)
     
-    # Com base nestes 3 métodos de seleção de features, podemos escolher as features mais importantes, iremos juntar uma combinação destas features
+    # Based on these 3 feature selection methods, we can choose the most important features, we will combine a combination of these features
     X_selected, selected_features = select_features(X, target)
+    
+    print("Selected features:")
+    print(selected_features)
     
     X_img = process_img_data(df_img)
     
     X_combined = combine_features(X_selected, X_img)
     
-    print(X_combined.shape)
+    # Tune hyperparameters
     
-    model, Xtest, ytest = train_neural_network(X_combined, target)
+    X_train, X_test, y_train, y_test = train_test_split(X_selected, target, test_size=0.2, random_state=42) # Tenho dúvida relativamente a concatenar aqui os dados tabulares com os dados de imagem num só array
+    best_model = tune_hyperparameters(X_train, y_train)
     
-    evaluate_model(model, Xtest, ytest)
+    print("Melhor modelo ajustado:")
+    print(best_model)
+    
+    #model, Xtest, ytest = train_neural_network(X_selected, target)
+    #evaluate_model(model, Xtest, ytest)
+    
+    #cnn_model, cnn_history, x_test, y_test = train_cnn(X_selected, X_img, target)
+    #evaluate_model_cnn(cnn_model, x_test, y_test)
     
     
     
