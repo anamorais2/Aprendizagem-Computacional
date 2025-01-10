@@ -94,45 +94,51 @@ def tune_hyperparameters(X, y):
     
     return grid_search.best_estimator_
 
-def train_cnn(X_tabular, X_img, y, img_shape=(21, 21, 1), epochs=50, batch_size=32):
-    
+def train_cnn(X_tabular, X_img, y, img_shape=(21, 21, 1), epochs=40, batch_size=64, dropout_rate=0.5, learning_rate=1e-3, conv_filters=[32, 64, 128], dense_units=128):
     # Reshape image data to the required shape
     X_img = X_img.reshape(X_img.shape[0], *img_shape)
     
     # Split the data into training and testing sets
-    X_train_tabular, X_test_tabular, X_train_img, X_test_img, y_train, y_test = train_test_split(X_tabular, X_img, y, test_size=0.2, random_state=42)
+    X_train_tabular, X_test_tabular, X_train_img, X_test_img, y_train, y_test = train_test_split(
+        X_tabular, X_img, y, test_size=0.2, random_state=42
+    )
     
     # Define the CNN model for image data
     img_input = tf.keras.layers.Input(shape=img_shape)
-    x = tf.keras.layers.Conv2D(32, kernel_size=(3, 3), activation='relu')(img_input)
-    x = tf.keras.layers.MaxPooling2D(pool_size=(2, 2))(x)
-    x = tf.keras.layers.Conv2D(64, kernel_size=(3, 3), activation='relu')(x)
-    x = tf.keras.layers.MaxPooling2D(pool_size=(2, 2))(x)
+    x = img_input
+    for filters in conv_filters:
+        x = tf.keras.layers.Conv2D(filters, kernel_size=(3, 3), activation='relu')(x)
+        x = tf.keras.layers.MaxPooling2D(pool_size=(1,1))(x)
     x = tf.keras.layers.Flatten()(x)
-    x = tf.keras.layers.Dense(128, activation='relu')(x)
-    x = tf.keras.layers.Dropout(0.5)(x)
-    img_output = tf.keras.layers.Dense(64, activation='relu')(x)
+    x = tf.keras.layers.Dense(dense_units, activation='relu')(x)
+    x = tf.keras.layers.Dropout(dropout_rate)(x)
+    img_output = tf.keras.layers.Dense(dense_units, activation='relu')(x)
     
     # Define the model for tabular data
     tabular_input = tf.keras.layers.Input(shape=(X_tabular.shape[1],))
-    y =tf.keras.layers.Dense(64, activation='relu')(tabular_input)
-    y = tf.keras.layers.Dropout(0.5)(y)
-    tabular_output = tf.keras.layers.Dense(64, activation='relu')(y)
+    y = tf.keras.layers.Dense(dense_units, activation='relu')(tabular_input)
+    y = tf.keras.layers.Dropout(dropout_rate)(y)
+    tabular_output = tf.keras.layers.Dense(dense_units, activation='relu')(y)
     
     # Combine the outputs of the two models
     combined = tf.keras.layers.concatenate([img_output, tabular_output])
-    z = tf.keras.layers.Dense(128, activation='relu')(combined)
-    z = tf.keras.layers.Dropout(0.5)(z)
+    z = tf.keras.layers.Dense(dense_units, activation='relu')(combined)
+    z = tf.keras.layers.Dropout(dropout_rate)(z)
     final_output = tf.keras.layers.Dense(1, activation='sigmoid')(z)
     
     # Define the combined model
     model = tf.keras.models.Model(inputs=[img_input, tabular_input], outputs=final_output)
     
     # Compile the model
-    model.compile(optimizer=tf.keras.optimizers.Adam(), loss='binary_crossentropy', metrics=['accuracy'])
+    optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+    model.compile(optimizer=optimizer, loss='binary_crossentropy', metrics=['accuracy'])
     
     # Train the model
-    history = model.fit([X_train_img, X_train_tabular], y_train, epochs=epochs, batch_size=batch_size, validation_split=0.2)
+    history = model.fit(
+        [X_train_img, X_train_tabular], y_train, 
+        epochs=epochs, batch_size=batch_size, 
+        validation_split=0.2
+    )
     
     return model, history, [X_test_img, X_test_tabular], y_test
 
@@ -170,3 +176,44 @@ def evaluate_model_cnn(model, Xtest, ytest):
     plt.ylabel('True Positive Rate')
     plt.title('ROC Curve')
     plt.show()
+
+def tune_hyperparameters_cnn(X_tabular, X_img, y, img_shape=(21, 21, 1)):
+    # Define the hyperparameter grid to be tested
+    param_grid = {
+        'epochs': [30, 40, 50],
+        'batch_size': [16, 32, 64],
+        'dropout_rate': [0.3, 0.5, 0.7],
+        'learning_rate': [1e-3, 1e-4],
+        'conv_filters': [[32, 64], [32, 64, 128]],
+        'dense_units': [64, 128, 256]
+    }
+
+    # Create the Keras model using the function that returns a compiled model
+    def create_model(dropout_rate=0.5, learning_rate=1e-3, conv_filters=[32, 64], dense_units=128, epochs=50, batch_size=32):
+        # Call the function that creates and trains the model
+        model, history, _, _ = train_cnn(
+            X_tabular, X_img, y, img_shape=img_shape, 
+            epochs=epochs, batch_size=batch_size, 
+            dropout_rate=dropout_rate, learning_rate=learning_rate, 
+            conv_filters=conv_filters, dense_units=dense_units
+        )
+        return model
+
+    # Wrap the model with KerasClassifier
+    model = tf.keras.wrappers.scikit_learn.KerasClassifier(build_fn=create_model, verbose=0)
+    # Create the GridSearchCV object to tune the hyperparameters
+    grid_search = GridSearchCV(estimator=model, param_grid=param_grid, cv=3, scoring='accuracy', n_jobs=-1)
+    
+    # Combine os dados tabulares e de imagem
+    X_combined = np.hstack((X_tabular, X_img))
+
+    # Fit the model using both tabular and image data
+    grid_search.fit(X_combined, y) 
+
+    # Print the best parameters found by the grid search
+    print("Melhores parâmetros encontrados:")
+    print(grid_search.best_params_)
+
+    # Return the best model after hyperparameter tuning
+    return grid_search.best_estimator_
+
