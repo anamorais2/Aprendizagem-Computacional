@@ -186,16 +186,16 @@ def main():
     selected_features_with_target = X.copy()
     selected_features_with_target['TARGET'] = target
     
-    #pcl.clustering(X,selected_features_with_target)
+    pcl.clustering(X,selected_features_with_target)
     
     print("--------------------------------------------DECISION TREES--------------------------------------------")
     
-    #X_train, X_test, y_train, y_test = train_test_split(X_selected, target, test_size=0.2, random_state=42)
-    #models = pdt.train_decision_trees(X_train, y_train)
-    #pdt.evaluate_models(models, X_test, y_test)
+    X_train, X_test, y_train, y_test = train_test_split(X_selected, target, test_size=0.2, random_state=42)
+    models = pdt.train_decision_trees(X_train, y_train)
+    pdt.evaluate_models(models, X_test, y_test)
     
     # Visualize all the trees
-    #pdt.visualize_all_trees(models, selected_features)
+    pdt.visualize_all_trees(models, selected_features)
 
     print("--------------------------------------------NEURAL NETWORKS--------------------------------------------")
     
@@ -208,6 +208,7 @@ def main():
     
     print("--------------------------------------------CNN--------------------------------------------")
     
+    # Tune hyperparameters
     #X_train, X_test, y_train, y_test = train_test_split(X_selected, target, test_size=0.2, random_state=42)
     #best_model = prn.tune_hyperparameters_cnn(X_train, y_train)
     
