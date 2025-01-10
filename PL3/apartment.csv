@@ -1,0 +1,15 @@
+Furniture,Nrooms,NewKitchen,Acceptable
+No,1,Yes,No
+Yes,1,No,No
+Yes,1,Yes,Yes
+No,2,Yes,Yes
+Yes,2,No,No
+Yes,2,Yes,Yes
+No,2,No,No
+Yes,3,No,No
+No,4,Yes,No
+Yes,3,Yes,Yes
+Yes,4,No,Yes
+No,3,Yes,No
+No,4,No,No
+Yes,4,Yes,Yes
