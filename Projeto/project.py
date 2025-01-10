@@ -200,10 +200,8 @@ def main():
     print("--------------------------------------------NEURAL NETWORKS--------------------------------------------")
     
     # Tune hyperparameters
-    #X_train, X_test, y_train, y_test = train_test_split(X_selected, target, test_size=0.2, random_state=42) # Tenho dúvida relativamente a concatenar aqui os dados tabulares com os dados de imagem num só array
+    #X_train, X_test, y_train, y_test = train_test_split(X_selected, target, test_size=0.2, random_state=42)
     #best_model = trn.tune_hyperparameters(X_train, y_train)
-    #print("Melhor modelo ajustado:")
-    #print(best_model)
     
     model, Xtest, ytest = prn.train_neural_network(X_selected, target)
     prn.evaluate_model(model, Xtest, ytest)
