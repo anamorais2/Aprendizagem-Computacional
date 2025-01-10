@@ -1,15 +1,10 @@
 from matplotlib import pyplot as plt
 import numpy as np
-import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.feature_selection import SelectFromModel, SelectKBest, f_classif, mutual_info_classif
 from sklearn.metrics import confusion_matrix, roc_curve
 from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.neural_network import MLPClassifier
-from sklearn.preprocessing import MinMaxScaler
 import seaborn as sns
 from sklearn.model_selection import cross_val_score
-from sklearn.utils.class_weight import compute_sample_weight
 import tensorflow as tf
 
 def train_neural_network(X, T):
@@ -98,7 +93,6 @@ def train_cnn(X_tabular, X_img, y, img_shape=(21, 21, 1), epochs=40, batch_size=
     # Reshape image data to the required shape
     X_img = X_img.reshape(X_img.shape[0], *img_shape)
     
-    # Split the data into training and testing sets
     X_train_tabular, X_test_tabular, X_train_img, X_test_img, y_train, y_test = train_test_split(
         X_tabular, X_img, y, test_size=0.2, random_state=42
     )
@@ -126,10 +120,8 @@ def train_cnn(X_tabular, X_img, y, img_shape=(21, 21, 1), epochs=40, batch_size=
     z = tf.keras.layers.Dropout(dropout_rate)(z)
     final_output = tf.keras.layers.Dense(1, activation='sigmoid')(z)
     
-    # Define the combined model
     model = tf.keras.models.Model(inputs=[img_input, tabular_input], outputs=final_output)
     
-    # Compile the model
     optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
     model.compile(optimizer=optimizer, loss='binary_crossentropy', metrics=['accuracy'])
     
@@ -178,7 +170,7 @@ def evaluate_model_cnn(model, Xtest, ytest):
     plt.show()
 
 def tune_hyperparameters_cnn(X_tabular, X_img, y, img_shape=(21, 21, 1)):
-    # Define the hyperparameter grid to be tested
+    
     param_grid = {
         'epochs': [30, 40, 50],
         'batch_size': [16, 32, 64],
@@ -188,9 +180,7 @@ def tune_hyperparameters_cnn(X_tabular, X_img, y, img_shape=(21, 21, 1)):
         'dense_units': [64, 128, 256]
     }
 
-    # Create the Keras model using the function that returns a compiled model
     def create_model(dropout_rate=0.5, learning_rate=1e-3, conv_filters=[32, 64], dense_units=128, epochs=50, batch_size=32):
-        # Call the function that creates and trains the model
         model, history, _, _ = train_cnn(
             X_tabular, X_img, y, img_shape=img_shape, 
             epochs=epochs, batch_size=batch_size, 
@@ -199,21 +189,15 @@ def tune_hyperparameters_cnn(X_tabular, X_img, y, img_shape=(21, 21, 1)):
         )
         return model
 
-    # Wrap the model with KerasClassifier
     model = tf.keras.wrappers.scikit_learn.KerasClassifier(build_fn=create_model, verbose=0)
-    # Create the GridSearchCV object to tune the hyperparameters
+    
     grid_search = GridSearchCV(estimator=model, param_grid=param_grid, cv=3, scoring='accuracy', n_jobs=-1)
     
-    # Combine os dados tabulares e de imagem
     X_combined = np.hstack((X_tabular, X_img))
 
-    # Fit the model using both tabular and image data
     grid_search.fit(X_combined, y) 
 
-    # Print the best parameters found by the grid search
-    print("Melhores parâmetros encontrados:")
+    print("Best parameters found:")
     print(grid_search.best_params_)
 
-    # Return the best model after hyperparameter tuning
     return grid_search.best_estimator_
-
