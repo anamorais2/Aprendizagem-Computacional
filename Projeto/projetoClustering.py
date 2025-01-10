@@ -218,7 +218,7 @@ def clustering(X_selected, selected_features_with_target):
     # Apply K-Means
     kmeans_labels, kmeans_model = apply_kmeans(X_selected, optimal_k)
     
-    #plot_clusters(X_selected, kmeans_labels, 'K-Means Clustering')
+    plot_clusters(X_selected, kmeans_labels, 'K-Means Clustering')
     
     # Apply DBSCAN
     eps_range = np.arange(0.1, 1.0, 0.1)
@@ -227,7 +227,7 @@ def clustering(X_selected, selected_features_with_target):
     dbscan = DBSCAN(eps=best_eps, min_samples=best_min_samples)
     dbscan_labels = dbscan.fit_predict(X_selected)
     
-    #plot_clusters(X_selected, dbscan_labels, 'DBSCAN Clustering')
+    plot_clusters(X_selected, dbscan_labels, 'DBSCAN Clustering')
     
     # Apply Agglomerative Clustering
     best_linkage, best_clusters  = apply_agglomerative(X_selected.values)
@@ -238,7 +238,7 @@ def clustering(X_selected, selected_features_with_target):
     print(f"Best linkage method: {best_linkage}")
     print(f"Best number of clusters: {best_clusters}")
     
-    #plot_dendrogram(X_selected, best_linkage)   
+    plot_dendrogram(X_selected, best_linkage)   
      
     # Apply Subtractive Clustering
     alpha_range = np.arange(1, 5, 0.5)
@@ -255,7 +255,7 @@ def clustering(X_selected, selected_features_with_target):
     print(f"Best radius: {best_radius}")
     print(f"Best min_potential: {best_min_potential}")
 
-    #plot_clusters(X_selected, clusters, 'Subtractive Clustering')
+    plot_clusters(X_selected, clusters, 'Subtractive Clustering')
     
     kmeans_silhouette = silhouette_score(X_selected, kmeans_labels)
     dbscan_silhouette = silhouette_score(X_selected, dbscan_labels)
@@ -273,10 +273,10 @@ def clustering(X_selected, selected_features_with_target):
     
     # Evaluate clusters
     print("K-Means")
-    #evaluate_clusters(X_selected, kmeans_labels,selected_features_with_target, 'TARGET') 
+    evaluate_clusters(X_selected, kmeans_labels,selected_features_with_target, 'TARGET') 
     print("DBSCAN")
     evaluate_clusters(X_selected, dbscan_labels, selected_features_with_target, 'TARGET')
     print("Agglomerative Clustering")
-    #evaluate_clusters(X_selected, agglo_labels, selected_features_with_target, 'TARGET')
+    evaluate_clusters(X_selected, agglo_labels, selected_features_with_target, 'TARGET')
     print("Subtractive Clustering")
-    #evaluate_clusters(X_selected, clusters, selected_features_with_target, 'TARGET')
+    evaluate_clusters(X_selected, clusters, selected_features_with_target, 'TARGET')
