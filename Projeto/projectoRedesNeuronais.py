@@ -13,11 +13,8 @@ from sklearn.utils.class_weight import compute_sample_weight
 import tensorflow as tf
 
 def train_neural_network(X, T):
-    # Divisão dos dados em treino e teste
     Xtrain, Xtest, ytrain, ytest = train_test_split(X, T, test_size=0.2, random_state=42)
     
-    
-    # Definir o modelo
     model = MLPClassifier(
         hidden_layer_sizes=(200, 100),
         max_iter=4000,
@@ -31,7 +28,6 @@ def train_neural_network(X, T):
     
     evaluate_with_cross_validation(model, Xtrain, ytrain)
     
-    # Treinar o modelo
     model.fit(Xtrain, ytrain)
     
     return model, Xtest, ytest
@@ -65,7 +61,7 @@ def evaluate_model(model, Xtest, ytest):
     plt.plot(fpr, tpr)
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
-    plt.title('Curva ROC')
+    plt.title('ROC Curve')
     plt.show()
     
 # Function for evaluation with cross-validation
@@ -73,8 +69,8 @@ def evaluate_with_cross_validation(model, X, y):
     f1_scores = cross_val_score(model, X, y, cv=5, scoring='f1')
     acc_scores = cross_val_score(model, X, y, cv=5, scoring='accuracy')
 
-    print("F1 Score médio em validação cruzada:", np.mean(f1_scores))
-    print("Acurácia média em validação cruzada:", np.mean(acc_scores))
+    print("Average F1 Score in cross-validation:", np.mean(f1_scores))
+    print("Average Accuracy in cross-validation:", np.mean(acc_scores))
 
     
 def tune_hyperparameters(X, y):
@@ -93,7 +89,7 @@ def tune_hyperparameters(X, y):
     grid_search = GridSearchCV(estimator=mlp, param_grid=param_grid, cv=5, scoring='accuracy', n_jobs=-1)
     grid_search.fit(X, y)
     
-    print("Melhores parâmetros encontrados:")
+    print("Best parameters found:")
     print(grid_search.best_params_)
     
     return grid_search.best_estimator_
